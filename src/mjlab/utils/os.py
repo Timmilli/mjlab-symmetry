@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, Union
 
 import yaml
+from copy import deepcopy
 
 
 def update_assets(
@@ -34,6 +35,18 @@ def update_assets(
       update_assets(assets, f, meshdir, glob, recursive)
 
 
+class SafeDumper(yaml.Dumper):
+  pass
+
+
+def represent_callable(dumper, func):
+  return dumper.represent_str(f"{func.__module__}.{func.__qualname__}")
+
+
+def represent_unknown(dumper, data):
+  return dumper.represent_str(repr(data))
+
+
 def dump_yaml(filename: Path, data: Dict, sort_keys: bool = False) -> None:
   """Saves data to a YAML file.
 
@@ -45,8 +58,13 @@ def dump_yaml(filename: Path, data: Dict, sort_keys: bool = False) -> None:
   if not filename.suffix:
     filename = filename.with_suffix(".yaml")
   filename.parent.mkdir(parents=True, exist_ok=True)
-  with open(filename, "w") as f:
-    yaml.dump(data, f, sort_keys=sort_keys)
+  SafeDumper.add_representer(type(lambda: None), represent_callable)  # functions
+  SafeDumper.add_multi_representer(
+    object, represent_unknown
+  )  # everything else (e.g. your RslRlVecEnvWrapper)
+
+  with open("config.yaml", "w") as f:
+    yaml.dump(data, f, Dumper=SafeDumper, default_flow_style=False, sort_keys=sort_keys)
 
 
 def get_checkpoint_path(
