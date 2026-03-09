@@ -8,6 +8,10 @@ from mjlab.entity import Entity
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import ContactSensor
 
+from mjlab.managers.manager_term_config import (
+  ObservationTermCfg,
+)
+
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
 
@@ -36,9 +40,17 @@ def foot_contact(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
   return (sensor_data.found > 0).float()
 
 
-def foot_contact_forces(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
-  sensor: ContactSensor = env.scene[sensor_name]
-  sensor_data = sensor.data
-  assert sensor_data.force is not None
-  forces_flat = sensor_data.force.flatten(start_dim=1)  # [B, N*3]
-  return torch.sign(forces_flat) * torch.log1p(torch.abs(forces_flat))
+class foot_contact_forces:
+  def __init__(self, env: ManagerBasedRlEnv, cfg: ObservationTermCfg):
+    self.env = env
+    self.cfg = cfg
+
+  def __call__(self, env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
+    sensor: ContactSensor = env.scene[sensor_name]
+    sensor_data = sensor.data
+    assert sensor_data.force is not None
+    forces_flat = sensor_data.force.flatten(start_dim=1)  # [B, N*3]
+    return torch.sign(forces_flat) * torch.log1p(torch.abs(forces_flat))
+
+  def apply_symmetry(self, obs) -> None:
+    obs[[1, 4]] *= -1
