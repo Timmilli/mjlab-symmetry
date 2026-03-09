@@ -1,7 +1,10 @@
 """RSL-RL configuration."""
 
 from dataclasses import dataclass, field
-from typing import Literal, Tuple
+from typing import Any, Literal, Tuple
+from types import FunctionType
+
+from .symmetry_cfg import RslRlSymmetryCfg
 
 
 @dataclass
@@ -63,6 +66,9 @@ class RslRlPpoAlgorithmCfg:
   """
   class_name: str = "PPO"
   """Ignore, required by RSL-RL."""
+  """Algorithm class name resolved by RSL-RL."""
+  symmetry_cfg: dict[str, bool | FunctionType | float | None] | None = None
+  """ """  # TODO
 
 
 @dataclass
