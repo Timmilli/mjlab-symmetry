@@ -180,10 +180,34 @@ class joint_vel_rel:
 ##
 
 
-def last_action(env: ManagerBasedRlEnv, action_name: str | None = None) -> torch.Tensor:
-    if action_name is None:
-        return env.action_manager.action
-    return env.action_manager.get_term(action_name).raw_action
+class last_action:
+    def __init__(
+        self,
+        cfg: ObservationTermCfg,
+        env: ManagerBasedRlEnv,
+    ):
+        self.cfg = cfg
+        self.env = env
+
+    def __call__(
+        self, env: ManagerBasedRlEnv, action_name: str | None = None
+    ) -> torch.Tensor:
+        if action_name is None:
+            return env.action_manager.action
+        return env.action_manager.get_term(action_name).raw_action
+
+    def apply_symmetry(self, obs: torch.Tensor):
+        robot = self.env.scene.entities["robot"]
+
+        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
+
+        offset = len(robot.actuator_names) - len(joint_ids)
+
+        inversed_indexes = (
+            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
+        )
+
+        obs[inversed_indexes] *= -1
 
 
 ##
