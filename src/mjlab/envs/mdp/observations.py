@@ -42,7 +42,7 @@ class base_lin_vel:
         return asset.data.root_link_lin_vel_b
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
-        obs[1] *= -1
+        obs[:, 1] *= -1
 
 
 class base_ang_vel:
@@ -61,7 +61,7 @@ class base_ang_vel:
         return asset.data.root_link_ang_vel_b
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
-        obs[1] *= -1
+        obs[:, [0, 2]] *= -1
 
 
 class projected_gravity:
@@ -82,7 +82,7 @@ class projected_gravity:
         return asset.data.projected_gravity_b
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
-        obs[1] *= -1
+        obs[:, 1] *= -1
 
 
 ##
@@ -130,7 +130,7 @@ class joint_pos_rel:
             torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
         )
 
-        obs[inversed_indexes] *= -1
+        obs[:, inversed_indexes] *= -1
 
 
 class joint_vel_rel:
@@ -172,7 +172,7 @@ class joint_vel_rel:
             torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
         )
 
-        obs[inversed_indexes] *= -1
+        obs[:, inversed_indexes] *= -1
 
 
 ##
@@ -207,7 +207,7 @@ class last_action:
             torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
         )
 
-        obs[inversed_indexes] *= -1
+        obs[:, inversed_indexes] *= -1
 
 
 ##
@@ -245,7 +245,7 @@ class generated_commands:
             torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
         )
 
-        obs[inversed_indexes] *= -1
+        obs[:, inversed_indexes] *= -1
 
 
 ##
@@ -273,4 +273,7 @@ class builtin_sensor:
         return sensor.data
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
-        obs[1] *= -1
+        if "ang_vel" in self.cfg.params["sensor_name"]:
+            obs[:, [0, 2]] *= -1
+        elif "lin_vel" in self.cfg.params["sensor_name"]:
+            obs[:, 1] *= -1
