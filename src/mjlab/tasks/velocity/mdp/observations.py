@@ -18,19 +18,35 @@ if TYPE_CHECKING:
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
 
 
-def foot_height(
-    env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
-) -> torch.Tensor:
-    asset: Entity = env.scene[asset_cfg.name]
-    return asset.data.site_pos_w[:, asset_cfg.site_ids, 2]  # (num_envs, num_sites)
+class foot_height:
+    def __init__(self, env: ManagerBasedRlEnv, cfg: ObservationTermCfg):
+        self.env = env
+        self.cfg = cfg
+
+    def __call__(
+        self, env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
+    ) -> torch.Tensor:
+        asset: Entity = env.scene[asset_cfg.name]
+        return asset.data.site_pos_w[:, asset_cfg.site_ids, 2]  # (num_envs, num_sites)
+
+    def apply_symmetry(self, obs: torch.Tensor):
+        obs[:, [0, 1]] = obs[:, [1, 0]]
 
 
-def foot_air_time(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
-    sensor: ContactSensor = env.scene[sensor_name]
-    sensor_data = sensor.data
-    current_air_time = sensor_data.current_air_time
-    assert current_air_time is not None
-    return current_air_time
+class foot_air_time:
+    def __init__(self, env: ManagerBasedRlEnv, cfg: ObservationTermCfg):
+        self.env = env
+        self.cfg = cfg
+
+    def __call__(self, env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
+        sensor: ContactSensor = env.scene[sensor_name]
+        sensor_data = sensor.data
+        current_air_time = sensor_data.current_air_time
+        assert current_air_time is not None
+        return current_air_time
+
+    def apply_symmetry(self, obs: torch.Tensor):
+        obs[:, [0, 1]] = obs[:, [1, 0]]
 
 
 class foot_contact:
