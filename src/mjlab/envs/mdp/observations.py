@@ -21,19 +21,83 @@ if TYPE_CHECKING:
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
 
 
+class ObservationFunc:
+    def __init__(
+        self,
+        env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
+    ):
+        self.env = env
+        self.cfg = cfg
+
+    def apply_joint_symmetry(
+        self,
+        obs: torch.Tensor,
+    ) -> None:
+        robot = self.env.scene.entities["robot"]
+
+        if "asset_cfg" in self.cfg.params.keys():
+            joint_nb = len(self.cfg.params["asset_cfg"].joint_ids)
+            actuator_nb = len(robot.actuator_names)
+            offset = actuator_nb - joint_nb
+        else:
+            offset = 0
+
+        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
+
+        inversed_indexes = (
+            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
+        )
+
+        obs[:, inversed_indexes] *= -1
+
+    def apply_xyz_symmetry(
+        self,
+        obs: torch.Tensor,
+    ) -> None:
+        obs[:, 1] *= -1
+
+    def apply_rpy_symmetry(
+        self,
+        obs: torch.Tensor,
+    ) -> None:
+        obs[:, [0, 2]] *= -1
+
+    def apply_action_symmetry(
+        self,
+        obs: torch.Tensor,
+    ) -> None:
+        robot = self.env.scene.entities["robot"]
+
+        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
+
+        offset = len(robot.actuator_names) - len(joint_ids)
+
+        inversed_indexes = (
+            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
+        )
+
+        obs[:, inversed_indexes] *= -1
+
+    def apply_foot_symmetry(
+        self,
+        obs: torch.Tensor,
+    ) -> None:
+        obs[:, [0, 1]] = obs[:, [1, 0]]
+
+
 ##
 # Root state.
 ##
 
 
-class base_lin_vel:
+class base_lin_vel(ObservationFunc):
     def __init__(
         self,
-        cfg: ObservationTermCfg,
         env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
     ):
-        self.cfg = cfg
-        self.env = env
+        super().__init__(env, cfg)
 
     def __call__(
         self, env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
@@ -42,17 +106,16 @@ class base_lin_vel:
         return asset.data.root_link_lin_vel_b
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
-        obs[:, 1] *= -1
+        self.apply_xyz_symmetry(obs)
 
 
-class base_ang_vel:
+class base_ang_vel(ObservationFunc):
     def __init__(
         self,
-        cfg: ObservationTermCfg,
         env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
     ):
-        self.cfg = cfg
-        self.env = env
+        super().__init__(env, cfg)
 
     def __call__(
         self, env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
@@ -61,17 +124,16 @@ class base_ang_vel:
         return asset.data.root_link_ang_vel_b
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
-        obs[:, [0, 2]] *= -1
+        self.apply_rpy_symmetry(obs)
 
 
-class projected_gravity:
+class projected_gravity(ObservationFunc):
     def __init__(
         self,
-        cfg: ObservationTermCfg,
         env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
     ):
-        self.cfg = cfg
-        self.env = env
+        super().__init__(env, cfg)
 
     def __call__(
         self,
@@ -82,7 +144,7 @@ class projected_gravity:
         return asset.data.projected_gravity_b
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
-        obs[:, 1] *= -1
+        self.apply_xyz_symmetry(obs)
 
 
 ##
@@ -90,14 +152,13 @@ class projected_gravity:
 ##
 
 
-class joint_pos_rel:
+class joint_pos_rel(ObservationFunc):
     def __init__(
         self,
-        cfg: ObservationTermCfg,
         env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
     ):
-        self.cfg = cfg
-        self.env = env
+        super().__init__(env, cfg)
 
     def __call__(
         self,
@@ -115,32 +176,16 @@ class joint_pos_rel:
         self,
         obs: torch.Tensor,
     ) -> None:
-        robot = self.env.scene.entities["robot"]
-
-        if "asset_cfg" in self.cfg.params.keys():
-            joint_nb = len(self.cfg.params["asset_cfg"].joint_ids)
-            actuator_nb = len(robot.actuator_names)
-            offset = actuator_nb - joint_nb
-        else:
-            offset = 0
-
-        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
-
-        inversed_indexes = (
-            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
-        )
-
-        obs[:, inversed_indexes] *= -1
+        self.apply_joint_symmetry(obs)
 
 
-class joint_vel_rel:
+class joint_vel_rel(ObservationFunc):
     def __init__(
         self,
-        cfg: ObservationTermCfg,
         env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
     ):
-        self.cfg = cfg
-        self.env = env
+        super().__init__(env, cfg)
 
     def __call__(
         self,
@@ -157,22 +202,7 @@ class joint_vel_rel:
         self,
         obs: torch.Tensor,
     ) -> None:
-        robot = self.env.scene.entities["robot"]
-
-        if "asset_cfg" in self.cfg.params.keys():
-            joint_nb = len(self.cfg.params["asset_cfg"].joint_ids)
-            actuator_nb = len(robot.actuator_names)
-            offset = actuator_nb - joint_nb
-        else:
-            offset = 0
-
-        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
-
-        inversed_indexes = (
-            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
-        )
-
-        obs[:, inversed_indexes] *= -1
+        self.apply_joint_symmetry(obs)
 
 
 ##
@@ -180,14 +210,13 @@ class joint_vel_rel:
 ##
 
 
-class last_action:
+class last_action(ObservationFunc):
     def __init__(
         self,
-        cfg: ObservationTermCfg,
         env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
     ):
-        self.cfg = cfg
-        self.env = env
+        super().__init__(env, cfg)
 
     def __call__(
         self, env: ManagerBasedRlEnv, action_name: str | None = None
@@ -197,17 +226,7 @@ class last_action:
         return env.action_manager.get_term(action_name).raw_action
 
     def apply_symmetry(self, obs: torch.Tensor):
-        robot = self.env.scene.entities["robot"]
-
-        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
-
-        offset = len(robot.actuator_names) - len(joint_ids)
-
-        inversed_indexes = (
-            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
-        )
-
-        obs[:, inversed_indexes] *= -1
+        self.apply_action_symmetry(obs)
 
 
 ##
@@ -215,14 +234,13 @@ class last_action:
 ##
 
 
-class generated_commands:
+class generated_commands(ObservationFunc):
     def __init__(
         self,
-        cfg: ObservationTermCfg,
         env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
     ):
-        self.cfg = cfg
-        self.env = env
+        super().__init__(env, cfg)
 
     def __call__(self, env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
         command = env.command_manager.get_command(command_name)
@@ -230,22 +248,7 @@ class generated_commands:
         return command
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
-        robot = self.env.scene.entities["robot"]
-
-        if "asset_cfg" in self.cfg.params.keys():
-            joint_nb = len(self.cfg.params["asset_cfg"].joint_ids)
-            actuator_nb = len(robot.actuator_names)
-            offset = actuator_nb - joint_nb
-        else:
-            offset = 0
-
-        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
-
-        inversed_indexes = (
-            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
-        )
-
-        obs[:, inversed_indexes] *= -1
+        self.apply_joint_symmetry(obs)
 
 
 ##
@@ -253,14 +256,13 @@ class generated_commands:
 ##
 
 
-class builtin_sensor:
+class builtin_sensor(ObservationFunc):
     def __init__(
         self,
-        cfg: ObservationTermCfg,
         env: ManagerBasedRlEnv,
+        cfg: ObservationTermCfg,
     ):
-        self.cfg = cfg
-        self.env = env
+        super().__init__(env, cfg)
 
     def __call__(
         self,
@@ -274,6 +276,6 @@ class builtin_sensor:
 
     def apply_symmetry(self, obs: torch.Tensor) -> None:
         if "ang_vel" in self.cfg.params["sensor_name"]:
-            obs[:, [0, 2]] *= -1
+            self.apply_rpy_symmetry(obs)
         elif "lin_vel" in self.cfg.params["sensor_name"]:
-            obs[:, 1] *= -1
+            self.apply_xyz_symmetry(obs)

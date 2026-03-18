@@ -15,13 +15,14 @@ from mjlab.managers.manager_term_config import (
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
 
+from mjlab.envs.mdp.observations import ObservationFunc
+
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
 
 
-class foot_height:
+class foot_height(ObservationFunc):
     def __init__(self, env: ManagerBasedRlEnv, cfg: ObservationTermCfg):
-        self.env = env
-        self.cfg = cfg
+        super().__init__(env, cfg)
 
     def __call__(
         self, env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
@@ -30,13 +31,12 @@ class foot_height:
         return asset.data.site_pos_w[:, asset_cfg.site_ids, 2]  # (num_envs, num_sites)
 
     def apply_symmetry(self, obs: torch.Tensor):
-        obs[:, [0, 1]] = obs[:, [1, 0]]
+        self.apply_foot_symmetry(obs)
 
 
-class foot_air_time:
+class foot_air_time(ObservationFunc):
     def __init__(self, env: ManagerBasedRlEnv, cfg: ObservationTermCfg):
-        self.env = env
-        self.cfg = cfg
+        super().__init__(env, cfg)
 
     def __call__(self, env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
         sensor: ContactSensor = env.scene[sensor_name]
@@ -46,13 +46,12 @@ class foot_air_time:
         return current_air_time
 
     def apply_symmetry(self, obs: torch.Tensor):
-        obs[:, [0, 1]] = obs[:, [1, 0]]
+        self.apply_foot_symmetry(obs)
 
 
-class foot_contact:
+class foot_contact(ObservationFunc):
     def __init__(self, env: ManagerBasedRlEnv, cfg: ObservationTermCfg):
-        self.env = env
-        self.cfg = cfg
+        super().__init__(env, cfg)
 
     def __call__(self, env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
         sensor: ContactSensor = env.scene[sensor_name]
@@ -61,13 +60,12 @@ class foot_contact:
         return (sensor_data.found > 0).float()
 
     def apply_symmetry(self, obs: torch.Tensor):
-        obs[:, [0, 1]] = obs[:, [1, 0]]
+        self.apply_foot_symmetry(obs)
 
 
-class foot_contact_forces:
+class foot_contact_forces(ObservationFunc):
     def __init__(self, env: ManagerBasedRlEnv, cfg: ObservationTermCfg):
-        self.env = env
-        self.cfg = cfg
+        super().__init__(env, cfg)
 
     def __call__(self, env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
         sensor: ContactSensor = env.scene[sensor_name]
