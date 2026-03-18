@@ -17,6 +17,7 @@ from mjlab.managers.manager_term_config import (
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
 
+from copy import deepcopy
 
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
 
@@ -29,6 +30,46 @@ class ObservationFunc:
     ):
         self.env = env
         self.cfg = cfg
+
+    def get_indexes(self, offset: int) -> tuple[torch.Tensor, torch.Tensor]:
+        robot = self.env.scene.entities["robot"]
+
+        joint_ids, joint_names = robot.find_joints_by_actuator_names(r".*")
+
+        inversed_joint_ids = deepcopy(joint_ids)
+
+        for joint_id, joint_name in zip(joint_ids, joint_names):
+            if "left" in joint_name.lower():
+                opposite_joint_name = joint_name.lower().replace("left", "right")
+                opposite_joint_id, _ = robot.find_joints_by_actuator_names(
+                    r"(?i)" + opposite_joint_name
+                )
+                tmp = inversed_joint_ids[joint_id]
+                inversed_joint_ids[joint_id] = inversed_joint_ids[opposite_joint_id[0]]
+                inversed_joint_ids[opposite_joint_id[0]] = tmp
+
+        regex_flag = ""
+        if "(?i)" in self.cfg.symmetry_regex:
+            regex_flag = "(?i)"
+        removed_joint_ids, _ = robot.find_joints_by_actuator_names(
+            rf"{regex_flag}"
+            + r"^(.(?!("
+            + self.cfg.symmetry_regex.replace("(?i)", "")
+            + r")))*$"
+        )
+        for joint_id in removed_joint_ids:
+            joint_ids.remove(joint_id)
+            inversed_joint_ids.remove(joint_id)
+
+        indexes: torch.Tensor = (
+            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
+        )
+        inversed_indexes: torch.Tensor = (
+            torch.tensor(inversed_joint_ids, device=self.env.device, dtype=torch.int)
+            - offset
+        )
+
+        return indexes, inversed_indexes
 
     def apply_joint_symmetry(
         self,
@@ -43,13 +84,9 @@ class ObservationFunc:
         else:
             offset = 0
 
-        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
+        indexes, inversed_indexes = self.get_indexes(offset)
 
-        inversed_indexes = (
-            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
-        )
-
-        obs[:, inversed_indexes] *= -1
+        obs[:, indexes] = -1 * obs[:, inversed_indexes]
 
     def apply_xyz_symmetry(
         self,
@@ -73,11 +110,9 @@ class ObservationFunc:
 
         offset = len(robot.actuator_names) - len(joint_ids)
 
-        inversed_indexes = (
-            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
-        )
+        indexes, inversed_indexes = self.get_indexes(offset)
 
-        obs[:, inversed_indexes] *= -1
+        obs[:, indexes] = -1 * obs[:, inversed_indexes]
 
     def apply_foot_symmetry(
         self,
