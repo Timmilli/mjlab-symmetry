@@ -66,7 +66,7 @@ def compute_symmetric_states(
         robot: Entity = env.scene.entities["robot"]
         joint_ids, _ = robot.find_joints_by_actuator_names(
             r"^(?!Head.*).*(Roll|Yaw)$"
-        )  # TODO change these names to be generic
+        )  # TODO: change these names to be generic
         offset = robot.data.joint_pos_target.shape[1] - actions_aug.shape[1]
         inversed_indexes = (
             torch.tensor(joint_ids, device=env.device, dtype=torch.int) - offset
