@@ -72,8 +72,8 @@ def compute_symmetric_states(
         symmetry_regex: str = env.cfg.actions["joint_pos"].actuator_names[0]
         offset = robot.data.joint_pos_target.shape[1] - actions_aug.shape[1]
         indexes, inversed_indexes = ObservationFunc(env, None).get_indexes(
-            offset, symmetry_regex
-        )
+            offset, r".*(?<!Head)_(Roll|Yaw)$"
+        )  # TODO: make it generic
 
         # actions
         actions_aug[batch_size:, indexes] = (
