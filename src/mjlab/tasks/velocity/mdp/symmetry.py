@@ -55,7 +55,6 @@ def compute_symmetric_states(
                 if hasattr(observation_func, "apply_symmetry"):
                     term_dim = env.observation_manager.group_obs_term_dim[group]
                     offset = sum([k[0] for k in term_dim[:index]])
-                    print(f"[DEBUG] {group} \t{term_cfg.func}")
                     observation_func.apply_symmetry(
                         obs_aug[group][
                             batch_size:,
