@@ -27,19 +27,31 @@ class ObservationFunc:
         self,
         env: ManagerBasedRlEnv,
         cfg: ObservationTermCfg | None,
+        symmetry_regex: str | None = None,
+        dofs_filter: str | None = None,
     ):
         self.env: ManagerBasedRlEnv = env
         if cfg is not None:
             self.cfg: ObservationTermCfg = cfg
 
+        if symmetry_regex is None:
+            self.symmetry_regex: str = self.cfg.symmetry_regex
+        else:
+            self.symmetry_regex = symmetry_regex
+        if dofs_filter is None:
+            self.dofs_filter: str | None = self.cfg.dofs_filter
+        else:
+            self.dofs_filter = dofs_filter
+
         self.robot: Entity = self.env.scene.entities["robot"]
 
+        # Get all joint ids and names of the robot
         self.joint_ids: list[int]
-        self.inversed_joint_ids: list[int]
-
         self.joint_ids, joint_names = self.robot.find_joints_by_actuator_names(r".*")
+        self.inversed_joint_ids: list[int]
         self.inversed_joint_ids = deepcopy(self.joint_ids)
 
+        # For each left joint, find its right and switch the indexes
         for joint_id, joint_name in zip(self.joint_ids, joint_names):
             if "left" in joint_name.lower():
                 opposite_joint_name = joint_name.lower().replace("left", "right")
@@ -53,56 +65,59 @@ class ObservationFunc:
                 ]
                 self.inversed_joint_ids[opposite_joint_id[0]] = tmp
 
-    def get_indexes(
-        self,
-        offset: int,
-        symmetry_regex: str = "",
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        if symmetry_regex == "":
-            symmetry_regex = self.cfg.symmetry_regex
+        # If the joint should be ignored by dofs_filter, ignores it
+        # Actually removes all that are not ignored
+        if self.dofs_filter is None:
+            removed_position_ids = []
+        else:
+            removed_position_ids, _ = self._get_removed_joints(self.dofs_filter)
 
-        joint_ids = deepcopy(self.joint_ids)
-        inversed_joint_ids = deepcopy(self.inversed_joint_ids)
+        position_joint_ids = deepcopy(self.joint_ids)
+        position_inversed_joint_ids = deepcopy(self.inversed_joint_ids)
 
+        for joint_id in removed_position_ids:
+            position_joint_ids.remove(joint_id)
+            position_inversed_joint_ids.remove(joint_id)
+
+        # If the joint should be included by the symmetry_regex, includes it
+        # Actually removes all that are not included
+        removed_sign_ids, _ = self._get_removed_joints(self.symmetry_regex)
+
+        sign_joint_ids = deepcopy(position_joint_ids)
+
+        for joint_id in removed_sign_ids:
+            if joint_id not in removed_position_ids:
+                sign_joint_ids.remove(joint_id)
+
+        # Transform everything into torch.Tensor for easier manipulation later
+        # and fixes the indexes according to how many joints have been removed
+        self.position_joint_ids: torch.Tensor = torch.tensor(
+            position_joint_ids, device=self.env.device, dtype=torch.int
+        ) - len(removed_position_ids)  # Only because Head is first in the list
+        self.position_inversed_joint_ids: torch.Tensor = torch.tensor(
+            position_inversed_joint_ids, device=self.env.device, dtype=torch.int
+        ) - len(removed_position_ids)  # Only because Head is first in the list
+
+        self.sign_joint_ids: torch.Tensor = torch.tensor(
+            sign_joint_ids, device=self.env.device, dtype=torch.int
+        ) - len(removed_position_ids)  # Only because Head is first in the list
+
+    def _get_removed_joints(self, regex: str) -> tuple[list[int], list[str]]:
         regex_flag = ""
-        if "(?i)" in symmetry_regex:
+        if "(?i)" in regex:
             regex_flag = "(?i)"
-        removed_joint_ids, _ = self.robot.find_joints_by_actuator_names(
-            rf"{regex_flag}"
-            + r"^(.(?!("
-            + symmetry_regex.replace("(?i)", "")
-            + r")))*$"
+        return self.robot.find_joints_by_actuator_names(
+            rf"{regex_flag}" + r"^(.(?!(" + regex.replace("(?i)", "") + r")))*$"
         )
-        for joint_id in removed_joint_ids:
-            joint_ids.remove(joint_id)
-            inversed_joint_ids.remove(joint_id)
-
-        indexes: torch.Tensor = (
-            torch.tensor(joint_ids, device=self.env.device, dtype=torch.int) - offset
-        )
-        inversed_indexes: torch.Tensor = (
-            torch.tensor(inversed_joint_ids, device=self.env.device, dtype=torch.int)
-            - offset
-        )
-
-        return indexes, inversed_indexes
 
     def apply_joint_symmetry(
         self,
         obs: torch.Tensor,
     ) -> None:
-        robot = self.env.scene.entities["robot"]
-
-        if "asset_cfg" in self.cfg.params.keys():
-            joint_nb = len(self.cfg.params["asset_cfg"].joint_ids)
-            actuator_nb = len(robot.actuator_names)
-            offset = actuator_nb - joint_nb
-        else:
-            offset = 0
-
-        indexes, inversed_indexes = self.get_indexes(offset)
-
-        obs[:, indexes] = -1 * obs[:, inversed_indexes]
+        # Switch between left and right
+        obs[:, self.position_joint_ids] = obs[:, self.position_inversed_joint_ids]
+        # Flip the signs according to sagitarial symmetry
+        obs[:, self.sign_joint_ids] = -1 * obs[:, self.sign_joint_ids]
 
     def apply_xyz_symmetry(
         self,
@@ -115,20 +130,6 @@ class ObservationFunc:
         obs: torch.Tensor,
     ) -> None:
         obs[:, [0, 2]] *= -1
-
-    def apply_action_symmetry(
-        self,
-        obs: torch.Tensor,
-    ) -> None:
-        robot = self.env.scene.entities["robot"]
-
-        joint_ids, _ = robot.find_joints_by_actuator_names(self.cfg.symmetry_regex)
-
-        offset = len(robot.actuator_names) - len(joint_ids)
-
-        indexes, inversed_indexes = self.get_indexes(offset)
-
-        obs[:, indexes] = -1 * obs[:, inversed_indexes]
 
     def apply_foot_symmetry(
         self,
@@ -277,7 +278,7 @@ class last_action(ObservationFunc):
         return env.action_manager.get_term(action_name).raw_action
 
     def apply_symmetry(self, obs: torch.Tensor):
-        self.apply_action_symmetry(obs)
+        self.apply_joint_symmetry(obs)
 
 
 ##

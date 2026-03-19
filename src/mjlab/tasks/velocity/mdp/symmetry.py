@@ -67,17 +67,13 @@ def compute_symmetric_states(
         batch_size = actions.shape[0]
         actions_aug = actions.repeat(2, 1)
         robot: Entity = env.scene.entities["robot"]
-        assert "joint_pos" in env.cfg.actions.keys()  # TODO: make it generic
-        assert isinstance(env.cfg.actions["joint_pos"], JointPositionActionCfg)
-        symmetry_regex: str = env.cfg.actions["joint_pos"].actuator_names[0]
         offset = robot.data.joint_pos_target.shape[1] - actions_aug.shape[1]
-        indexes, inversed_indexes = ObservationFunc(env, None).get_indexes(
-            offset, r".*(?<!Head)_(Roll|Yaw)$"
-        )  # TODO: make it generic
-
-        # actions
-        actions_aug[batch_size:, indexes] = (
-            -1 * actions_aug[batch_size:, inversed_indexes]
-        )
+        dofs_filter = r".*(?<!Head_Yaw)(?<!Head_Pitch)$"
+        symmetry_regex = r".*(?<!Head)_(Roll|Yaw)$"  # TODO: make it generic
+        ObservationFunc(
+            env, None, symmetry_regex=symmetry_regex, dofs_filter=dofs_filter
+        ).apply_joint_symmetry(
+            actions_aug[batch_size:]
+        )  # TODO: change that so it doesn't re-initialize for each env
 
     return obs_aug, actions_aug
