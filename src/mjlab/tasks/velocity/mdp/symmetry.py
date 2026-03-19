@@ -6,6 +6,9 @@ from mjlab.envs.manager_based_rl_env import ManagerBasedRlEnv
 from mjlab.entity.entity import Entity
 import inspect
 
+from mjlab.envs.mdp.observations import ObservationFunc
+from mjlab.envs.mdp.actions.actions_config import JointPositionActionCfg
+
 
 def compute_symmetric_states(
     env: ManagerBasedRlEnv,
@@ -52,6 +55,7 @@ def compute_symmetric_states(
                 if hasattr(observation_func, "apply_symmetry"):
                     term_dim = env.observation_manager.group_obs_term_dim[group]
                     offset = sum([k[0] for k in term_dim[:index]])
+                    print(f"[DEBUG] {group} \t{term_cfg.func}")
                     observation_func.apply_symmetry(
                         obs_aug[group][
                             batch_size:,
@@ -64,15 +68,17 @@ def compute_symmetric_states(
         batch_size = actions.shape[0]
         actions_aug = actions.repeat(2, 1)
         robot: Entity = env.scene.entities["robot"]
-        joint_ids, _ = robot.find_joints_by_actuator_names(
-            r"^(?!Head.*).*(Roll|Yaw)$"
-        )  # TODO: change these names to be generic
+        assert "joint_pos" in env.cfg.actions.keys()  # TODO: make it generic
+        assert isinstance(env.cfg.actions["joint_pos"], JointPositionActionCfg)
+        symmetry_regex: str = env.cfg.actions["joint_pos"].actuator_names[0]
         offset = robot.data.joint_pos_target.shape[1] - actions_aug.shape[1]
-        inversed_indexes = (
-            torch.tensor(joint_ids, device=env.device, dtype=torch.int) - offset
+        indexes, inversed_indexes = ObservationFunc(env, None).get_indexes(
+            offset, symmetry_regex
         )
 
         # actions
-        actions_aug[batch_size:, inversed_indexes] *= -1
+        actions_aug[batch_size:, indexes] = (
+            -1 * actions_aug[batch_size:, inversed_indexes]
+        )
 
     return obs_aug, actions_aug

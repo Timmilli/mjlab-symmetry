@@ -26,35 +26,51 @@ class ObservationFunc:
     def __init__(
         self,
         env: ManagerBasedRlEnv,
-        cfg: ObservationTermCfg,
+        cfg: ObservationTermCfg | None,
     ):
-        self.env = env
-        self.cfg = cfg
+        self.env: ManagerBasedRlEnv = env
+        if cfg is not None:
+            self.cfg: ObservationTermCfg = cfg
 
-    def get_indexes(self, offset: int) -> tuple[torch.Tensor, torch.Tensor]:
-        robot = self.env.scene.entities["robot"]
+        self.robot: Entity = self.env.scene.entities["robot"]
 
-        joint_ids, joint_names = robot.find_joints_by_actuator_names(r".*")
+        self.joint_ids: list[int]
+        self.inversed_joint_ids: list[int]
 
-        inversed_joint_ids = deepcopy(joint_ids)
+        self.joint_ids, joint_names = self.robot.find_joints_by_actuator_names(r".*")
+        self.inversed_joint_ids = deepcopy(self.joint_ids)
 
-        for joint_id, joint_name in zip(joint_ids, joint_names):
+        for joint_id, joint_name in zip(self.joint_ids, joint_names):
             if "left" in joint_name.lower():
                 opposite_joint_name = joint_name.lower().replace("left", "right")
-                opposite_joint_id, _ = robot.find_joints_by_actuator_names(
+                opposite_joint_id, _ = self.robot.find_joints_by_actuator_names(
                     r"(?i)" + opposite_joint_name
                 )
-                tmp = inversed_joint_ids[joint_id]
-                inversed_joint_ids[joint_id] = inversed_joint_ids[opposite_joint_id[0]]
-                inversed_joint_ids[opposite_joint_id[0]] = tmp
+
+                tmp = self.inversed_joint_ids[joint_id]
+                self.inversed_joint_ids[joint_id] = self.inversed_joint_ids[
+                    opposite_joint_id[0]
+                ]
+                self.inversed_joint_ids[opposite_joint_id[0]] = tmp
+
+    def get_indexes(
+        self,
+        offset: int,
+        symmetry_regex: str = "",
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if symmetry_regex == "":
+            symmetry_regex = self.cfg.symmetry_regex
+
+        joint_ids = deepcopy(self.joint_ids)
+        inversed_joint_ids = deepcopy(self.inversed_joint_ids)
 
         regex_flag = ""
-        if "(?i)" in self.cfg.symmetry_regex:
+        if "(?i)" in symmetry_regex:
             regex_flag = "(?i)"
-        removed_joint_ids, _ = robot.find_joints_by_actuator_names(
+        removed_joint_ids, _ = self.robot.find_joints_by_actuator_names(
             rf"{regex_flag}"
             + r"^(.(?!("
-            + self.cfg.symmetry_regex.replace("(?i)", "")
+            + symmetry_regex.replace("(?i)", "")
             + r")))*$"
         )
         for joint_id in removed_joint_ids:
