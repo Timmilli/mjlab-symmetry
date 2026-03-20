@@ -110,7 +110,7 @@ torch = { index = "pytorch-cu128", extra = "cu128", marker = "sys_platform != 'd
 
 [tool.ruff]
 src = ["src"]  # Helpful for recognizing first-party imports.
-indent-width = 4
+indent-width = 2
 exclude = [
   "src/mjlab/utils/lab_api",
   "typings",
