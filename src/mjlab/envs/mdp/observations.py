@@ -48,8 +48,7 @@ class ObservationFunc:
         # Get all joint ids and names of the robot
         self.joint_ids: list[int]
         self.joint_ids, joint_names = self.robot.find_joints_by_actuator_names(r".*")
-        self.inversed_joint_ids: list[int]
-        self.inversed_joint_ids = deepcopy(self.joint_ids)
+        self.inversed_joint_ids: list[int] = deepcopy(self.joint_ids)
 
         # For each left joint, find its right and switch the indexes
         for joint_id, joint_name in zip(self.joint_ids, joint_names):
@@ -66,7 +65,6 @@ class ObservationFunc:
                 self.inversed_joint_ids[opposite_joint_id[0]] = tmp
 
         # If the joint should be ignored by dofs_filter, ignores it
-        # Actually removes all that are not ignored
         if self.dofs_filter is None:
             removed_position_ids = []
         else:
@@ -80,7 +78,6 @@ class ObservationFunc:
             position_inversed_joint_ids.remove(joint_id)
 
         # If the joint should be included by the symmetry_regex, includes it
-        # Actually removes all that are not included
         removed_sign_ids, _ = self._get_removed_joints(self.symmetry_regex)
 
         sign_joint_ids = deepcopy(position_joint_ids)
@@ -93,14 +90,14 @@ class ObservationFunc:
         # and fixes the indexes according to how many joints have been removed
         self.position_joint_ids: torch.Tensor = torch.tensor(
             position_joint_ids, device=self.env.device, dtype=torch.int
-        ) - len(removed_position_ids)  # Only because Head is first in the list
+        ) - len(removed_position_ids)  # Only because Head is first in the joint list
         self.position_inversed_joint_ids: torch.Tensor = torch.tensor(
             position_inversed_joint_ids, device=self.env.device, dtype=torch.int
-        ) - len(removed_position_ids)  # Only because Head is first in the list
+        ) - len(removed_position_ids)  # Only because Head is first in the joint list
 
         self.sign_joint_ids: torch.Tensor = torch.tensor(
             sign_joint_ids, device=self.env.device, dtype=torch.int
-        ) - len(removed_position_ids)  # Only because Head is first in the list
+        ) - len(removed_position_ids)  # Only because Head is first in the joint list
 
     def _get_removed_joints(self, regex: str) -> tuple[list[int], list[str]]:
         regex_flag = ""
@@ -112,28 +109,28 @@ class ObservationFunc:
 
     def apply_joint_symmetry(
         self,
-        obs: torch.Tensor,
+        obs: torch.Tensor,  # [N, nb_joints]
     ) -> None:
         # Switch between left and right
         obs[:, self.position_joint_ids] = obs[:, self.position_inversed_joint_ids]
-        # Flip the signs according to sagitarial symmetry
+        # Flip the signs according to sagittal plan
         obs[:, self.sign_joint_ids] = -1 * obs[:, self.sign_joint_ids]
 
     def apply_xyz_symmetry(
         self,
-        obs: torch.Tensor,
+        obs: torch.Tensor,  # [N, 3]
     ) -> None:
         obs[:, 1] *= -1
 
     def apply_rpy_symmetry(
         self,
-        obs: torch.Tensor,
+        obs: torch.Tensor,  # [N, 3]
     ) -> None:
         obs[:, [0, 2]] *= -1
 
     def apply_foot_symmetry(
         self,
-        obs: torch.Tensor,
+        obs: torch.Tensor,  # [N, 2]
     ) -> None:
         obs[:, [0, 1]] = obs[:, [1, 0]]
 
@@ -152,7 +149,9 @@ class base_lin_vel(ObservationFunc):
         super().__init__(env, cfg)
 
     def __call__(
-        self, env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
+        self,
+        env: ManagerBasedRlEnv,
+        asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
     ) -> torch.Tensor:
         asset: Entity = env.scene[asset_cfg.name]
         return asset.data.root_link_lin_vel_b
@@ -170,7 +169,9 @@ class base_ang_vel(ObservationFunc):
         super().__init__(env, cfg)
 
     def __call__(
-        self, env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
+        self,
+        env: ManagerBasedRlEnv,
+        asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
     ) -> torch.Tensor:
         asset: Entity = env.scene[asset_cfg.name]
         return asset.data.root_link_ang_vel_b
