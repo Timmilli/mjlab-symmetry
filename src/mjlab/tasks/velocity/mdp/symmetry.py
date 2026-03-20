@@ -78,8 +78,5 @@ def compute_symmetric_states(
         ).apply_joint_symmetry(
             actions_aug[batch_size:]
         )  # TODO: change that so it doesn't re-initialize for each env
-        import ipdb
-
-        ipdb.set_trace()
 
     return obs_aug, actions_aug
